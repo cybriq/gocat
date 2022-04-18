@@ -1,3 +1,6 @@
 gocat
 
 *.swp
+./.idea
+go.mod
+/.idea/**

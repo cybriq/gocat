@@ -10,11 +10,12 @@
 // optionally adding a prefix to all top-level names.
 //
 // Usage:
-//	gocat [-p pkgname] [-x prefix] file_0 [file_n...] >file.go
+//
+//    gocat [-p pkgname] [-x prefix] file_0 [file_n...] >file.go
 //
 // Example
 //
-//	gocat -p acl github.com/naegelejd/go-acl/acl* > acl.go
+//	  gocat -p acl github.com/naegelejd/go-acl/acl* > acl.go
 //
 // Bugs
 //
@@ -28,6 +29,10 @@
 // and a field key in the literal key is the same as a top-level name.
 //
 // It does not work with embedded struct fields.
+//
+// Using grep and xargs to filter out tests can be done like so:
+//
+//     ls *.go|grep -v _test|xargs gocat>p2p/aio.go
 package main
 
 import (
@@ -133,18 +138,20 @@ func main() {
 	}
 
 	for _, f := range files {
-		walk(f, func(n interface{}) {
-			kv, ok := n.(*ast.KeyValueExpr)
-			if ok {
-				if id, ok := kv.Key.(*ast.Ident); ok && renamed[id] && isType[id.Name[len(*prefix):]] {
-					id.Name = id.Name[len(*prefix):]
+		walk(f,
+			func(n interface{}) {
+				kv, ok := n.(*ast.KeyValueExpr)
+				if ok {
+					if id, ok := kv.Key.(*ast.Ident); ok && renamed[id] && isType[id.Name[len(*prefix):]] {
+						id.Name = id.Name[len(*prefix):]
+					}
 				}
-			}
-			id, ok := n.(*ast.Ident)
-			if ok && (id.Obj != nil && isTop[id.Obj.Decl] || id.Obj == nil && isTopName[id.Name]) {
-				rename(id)
-			}
-		})
+				id, ok := n.(*ast.Ident)
+				if ok && (id.Obj != nil && isTop[id.Obj.Decl] || id.Obj == nil && isTopName[id.Name]) {
+					rename(id)
+				}
+			},
+		)
 	}
 
 	var f0 *ast.File
@@ -159,16 +166,22 @@ func main() {
 			f.Name = &ast.Ident{Name: "PACKAGE-DELETE-ME"}
 			for _, spec := range f.Imports {
 				if spec.Name != nil {
-					fmt.Printf("%s: renamed import not supported", fset.Position(spec.Name.Pos()))
+					fmt.Printf("%s: renamed import not supported",
+						fset.Position(spec.Name.Pos()),
+					)
 					continue
 				}
 				path, err := strconv.Unquote(spec.Path.Value)
 				if err != nil {
-					fmt.Printf("%s: invalid quoted string %s", fset.Position(spec.Name.Pos()), spec.Path.Value)
+					fmt.Printf("%s: invalid quoted string %s",
+						fset.Position(spec.Name.Pos()), spec.Path.Value,
+					)
 					continue
 				}
 				if path == "C" {
-					fmt.Printf("%s: import \"C\" not supported", fset.Position(spec.Name.Pos()))
+					fmt.Printf("%s: import \"C\" not supported",
+						fset.Position(spec.Name.Pos()),
+					)
 					continue
 				}
 				addImport(f0, path)
@@ -191,7 +204,9 @@ func main() {
 		printer.Fprint(&buf, fset, f)
 	}
 
-	data := bytes.Replace(buf.Bytes(), []byte("package PACKAGE-DELETE-ME\n"), nil, -1)
+	data := bytes.Replace(
+		buf.Bytes(), []byte("package PACKAGE-DELETE-ME\n"), nil, -1,
+	)
 
 	f, err := parser.ParseFile(fset, "rewritten", data, parser.ParseComments)
 	if err != nil {
@@ -341,17 +356,19 @@ func renameTop(f *ast.File, old, new string) bool {
 	// Rename top-level old to new, both unresolved names
 	// (probably defined in another file) and names that resolve
 	// to a declaration we renamed.
-	walk(f, func(n interface{}) {
-		id, ok := n.(*ast.Ident)
-		if ok && isTopName(id, old) {
-			id.Name = new
-			fixed = true
-		}
-		if ok && id.Obj != nil && id.Name == old && id.Obj.Name == new {
-			id.Name = id.Obj.Name
-			fixed = true
-		}
-	})
+	walk(f,
+		func(n interface{}) {
+			id, ok := n.(*ast.Ident)
+			if ok && isTopName(id, old) {
+				id.Name = new
+				fixed = true
+			}
+			if ok && id.Obj != nil && id.Name == old && id.Obj.Name == new {
+				id.Name = id.Obj.Name
+				fixed = true
+			}
+		},
+	)
 
 	return fixed
 }
